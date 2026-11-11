@@ -1,0 +1,25 @@
+node_modules/
+private/
+data/
+
+# Local credentials and runtime artifacts
+.env
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Local screenshots, audits and acceptance records
+preview*.png
+ACCURACY-AUDIT.*
+ACCEPTANCE.md
+*-VERIFICATION.md

@@ -1,0 +1,2 @@
+import { test } from 'node:test';import { strict as assert } from 'node:assert';import { detectEvents } from './monitor.mjs';
+test('過期行情不觸發警示；利率首次建檔不誤報為新事件',()=>{const h={indices:[{name:'發行量加權股價指數',changePercent:4,date:'2026-11-11',source:'TWSE'}],macro:[{id:'rates',period:'20240322',source:'CBC'}],sources:[{id:'prices',stale:true},{id:'rates',stale:false}]};assert.equal(detectEvents(h,{}).length,0);h.sources[0].stale=false;assert.equal(detectEvents(h,{}).length,1);assert.equal(detectEvents(h,{rates:'20230324'}).length,2);});

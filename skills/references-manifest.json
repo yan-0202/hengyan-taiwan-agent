@@ -1,0 +1,24 @@
+{
+  "repository": "anthropics/financial-services",
+  "revision": "60565064557ca77b12f62aa7877f365d111c129d",
+  "files": [
+    {
+      "file": "best-practices.md",
+      "bytes": 9355,
+      "sha256": "a688e6b53d408fcfc36cb5490e9e2a75b82789f876f14ba22119bf19db655d09",
+      "source": "https://raw.githubusercontent.com/anthropics/financial-services/60565064557ca77b12f62aa7877f365d111c129d/plugins/vertical-plugins/equity-research/skills/earnings-analysis/references/best-practices.md"
+    },
+    {
+      "file": "report-structure.md",
+      "bytes": 11141,
+      "sha256": "60da5bd7cde0d93f197d21618bf801978022c4b24b91f2ed9ba21eb2945dc586",
+      "source": "https://raw.githubusercontent.com/anthropics/financial-services/60565064557ca77b12f62aa7877f365d111c129d/plugins/vertical-plugins/equity-research/skills/earnings-analysis/references/report-structure.md"
+    },
+    {
+      "file": "workflow.md",
+      "bytes": 21406,
+      "sha256": "c8922b00e1f7fbbb23afc7601430bbb9c8bf0ac995f478bdd3b368aad6cf0a01",
+      "source": "https://raw.githubusercontent.com/anthropics/financial-services/60565064557ca77b12f62aa7877f365d111c129d/plugins/vertical-plugins/equity-research/skills/earnings-analysis/references/workflow.md"
+    }
+  ]
+}

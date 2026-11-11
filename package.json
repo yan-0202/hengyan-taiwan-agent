@@ -1,0 +1,19 @@
+{
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "pdf-parse": "^2.4.5",
+    "read-excel-file": "^9.3.15"
+  },
+  "name": "hengyan-taiwan-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:workflow": "node --test workspace.test.mjs",
+    "test:data": "node --test datahub.test.mjs monitor.test.mjs"
+  }
+}

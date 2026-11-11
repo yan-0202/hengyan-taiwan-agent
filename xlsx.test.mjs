@@ -1,0 +1,3 @@
+import { test } from 'node:test';import { strict as assert } from 'node:assert';import { readFile } from 'node:fs/promises';import { parseSpreadsheet } from './workspace.mjs';
+test('真實 XLSX 解析保留工作表、列號與公式快取值',async()=>{const d=await parseSpreadsheet(await readFile(new URL('examples/synthetic-financial.xlsx',import.meta.url)));assert.equal(d.sheetNames[0],'測試財報');assert.ok(d.pages[0].includes('第 1 列：營業收入（合成測試資料）\t120'));assert.ok(d.pages[0].includes('0.35'));assert.ok(d.pages[0].includes('不重新計算公式'));});
+test('無效 XLSX 回覆可理解錯誤而不是掛住工作台',async()=>{await assert.rejects(parseSpreadsheet(Buffer.from('PKinvalid')),/Excel/);});
