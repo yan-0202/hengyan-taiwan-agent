@@ -3,6 +3,20 @@ import { cloudMode } from './tenancy.mjs';
 
 const attempts = new Map();
 const cookieName = '__Host-hengyan';
+export function signupFailure(error){
+  const code=/^[a-z_]{1,64}$/.test(error?.code??'')?error.code:'unknown';
+  const messages={
+    email_address_not_authorized:'網站目前使用 Supabase 預設寄信，只能寄給專案團隊信箱。管理者需先設定 SMTP，才能開放一般使用者註冊。',
+    over_email_send_rate_limit:'驗證信寄送次數已達服務上限，本次未能寄出。請稍後再試；管理者需檢查寄信額度。',
+    over_request_rate_limit:'註冊請求過於頻繁，請稍後再試。',
+    signup_disabled:'網站目前尚未開放新帳號註冊，請聯絡管理者。',
+    email_provider_disabled:'網站尚未啟用電子郵件註冊，請聯絡管理者。',
+    email_address_invalid:'這個 Email 格式或網域不被驗證服務接受，請檢查信箱。',
+    weak_password:'密碼不符合網站的安全要求，請使用更長且不重複的密碼。',
+    captcha_failed:'網站驗證檢查未通過，請聯絡管理者確認驗證設定。',
+  };
+  return {code,message:messages[code]??'帳號或驗證信處理未完成。請稍後再試；若持續失敗，請把畫面上的錯誤代碼提供給管理者。'};
+}
 export function publicOrigin() {
   const raw = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL;
   if (!raw) throw new Error('缺少公開網址');
@@ -67,7 +81,12 @@ export async function handleAuth(req, res, path) {
     const client = cloudClient();
     if (path.endsWith('/signup')) {
       const { error } = await client.auth.signUp({ email, password, options: { emailRedirectTo: publicOrigin() + '/login' } });
-      if (error) throw new Error('註冊未完成，請檢查資料或稍後再試');
+      if (error) {
+        const failure=signupFailure(error);
+        // 僅記錄可辨識的代碼與狀態；不記錄信箱、密碼、金鑰或供應商原始錯誤內容。
+        console.warn(JSON.stringify({event:'auth_signup_failed',code:failure.code,status:Number.isInteger(error.status)?error.status:null}));
+        res.writeHead(error.status===429?429:400);res.end(JSON.stringify({error:failure.message,errorCode:failure.code}));return true;
+      }
       res.end(JSON.stringify({ message: '如可註冊，驗證信將寄到你的信箱。請完成驗證後登入。' })); return true;
     }
     const { data, error } = await client.auth.signInWithPassword({ email, password });
