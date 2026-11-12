@@ -25,7 +25,7 @@ export function analyzeText(input, watchlist=[]) {
  const pos=positive.filter(t=>contains(text,t)),neg=negative.filter(t=>contains(text,t));
  const uncertain=/可能|預期|預估|傳聞|不會|沒有|並非|未能|未見|否認|\b(may|might|could|not|no|denies|forecast|expected)\b/i.test(text);
  const tone=uncertain?'不確定':pos.length&&neg.length?'混合':pos.length?'正向':neg.length?'負向':'未判定';
- const quantities=[...text.matchAll(/(?:NT\$|US\$|\$)?\d[\d,.]*(?:\s*(?:%|％|億元|萬元|億|百萬|million|billion|元))/gi)].slice(0,20).map(m=>({quote:m[0],offset:m.index,note:'原文字串，單位與口徑未驗證，不可直接運算'}));
+ const quantities=[...text.matchAll(/(?:NT\$|US\$|\$)?[+\-−]?\d[\d,.]*(?:\s*(?:%|％|億元|萬元|億|百萬|million|billion|元))/gi)].slice(0,20).map(m=>({quote:m[0],offset:m.index,note:'原文字串，單位與口徑未驗證，不可直接運算'}));
  return {method:'規則詞典 v1（非訓練模型）',entities,topics,keywords:[...new Set(topics.flatMap(x=>x.matched))],tone,toneMatches:[...pos,...neg],quantities,limitation:'僅就提供文字辨識；無匹配不代表無事件。語氣不是投資利多／利空，也不是預測；否定、反諷與多語言仍可能誤判。'};
 }
 export function searchTerms(query){const analysis=analyzeText(query);return [...new Set(themes.filter(([topic])=>analysis.topics.some(t=>t.topic===topic)).flatMap(([,terms])=>terms).map(t=>t.toLowerCase()))];}

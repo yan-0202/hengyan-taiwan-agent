@@ -6,6 +6,7 @@ const watchlist=[{code:'2330',name:'台積電',keyword:'TSMC'},{code:'2317',name
 test('公司實體、事件、語氣與數值擷取保留原文；英文邊界避免子字誤配',()=>{
  const r=analyzeText('台積電營收成長 20%，預估投資 100 億元',watchlist);
  assert.equal(r.entities[0].code,'2330');assert.equal(r.tone,'不確定');assert.ok(r.topics.some(t=>t.topic==='財報與營收'));assert.equal(r.quantities[0].quote,'20%');
+ assert.equal(analyzeText('營收年減 -20%').quantities[0].quote,'-20%');
  assert.equal(contains('profitability','profit'),false);assert.equal(analyzeText('TSMC revenue growth',watchlist).tone,'正向');assert.equal(analyzeText('no growth expected').tone,'不確定');
 });
 test('自然語言辨識期間公司主題，檢索使用日期與匹配證據，不假裝全網搜尋',()=>{
