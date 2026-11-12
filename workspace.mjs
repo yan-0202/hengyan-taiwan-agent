@@ -6,6 +6,7 @@ import { runAssigned, teamReadiness } from './ai.mjs';
 import { cachedSnapshot } from './evidence.mjs';
 import { newsState, newsEvidence, newsLimit } from './news.mjs';
 import { chartSnapshot } from './chart.mjs';
+import { analyzeText, semanticNLP, searchTerms } from './nlp.mjs';
 import { reportHTML } from './reports.mjs';
 import { qualityVersion, inventory, sourceChecks, prerequisites, decisionSchema, validateDecision, qualityView } from './quality.mjs';
 import { cloudMode, tenantId } from './tenancy.mjs';
@@ -24,7 +25,7 @@ export function checkCitations(text,evidence){
 }
 export function chunks(pages){return pages.flatMap((page,i)=>{const out=[];for(let n=0;n<page.length;n+=850)out.push({page:i+1,text:page.slice(n,n+1000)});return out;});}
 export function rank(query,documents){
- const tokens=[...new Set(query.toLowerCase().match(/[a-z0-9]+|[\u4e00-\u9fff]{1,2}/g)??[])];
+ const tokens=[...new Set([...(query.toLowerCase().match(/[a-z0-9]+|[\u4e00-\u9fff]{1,2}/g)??[]),...searchTerms(query)])];
  return documents.flatMap(d=>d.chunks.map((c,i)=>({...c,documentId:d.id,title:d.title,period:d.period,source:d.source,chunk:i,score:tokens.reduce((s,t)=>s+(c.text.toLowerCase().includes(t)?t.length:0),0)}))).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,8).map((x,i)=>({...x,citation:`E${i+1}`}));
 }
 async function documents(){await mkdir(dir,{recursive:true});const files=(await readdir(dir)).filter(f=>/^doc-[a-f0-9-]+\.json$/.test(f));return Promise.all(files.map(async f=>JSON.parse(await readFile(new URL(f,dir),'utf8'))));}
@@ -73,6 +74,14 @@ export async function handleWorkspace(req,res,path,url){
  try{
  await mkdir(dir,{recursive:true});if(req.method==='POST'&&!String(req.headers['content-type']).startsWith('application/json'))throw new Error('請使用 JSON');let result;
  if(path==='/api/workspace/readiness'){result=await teamReadiness();}
+ else if(path==='/api/workspace/nlp-document'&&req.method==='POST'){
+  const p=await body(req);if(!/^[a-f0-9-]{36}$/.test(p.id))throw new Error('文件 ID 無效');
+  const doc=(await documents()).find(d=>d.id===p.id);if(!doc)throw new Error('找不到目前帳號的文件');
+  const query=String(p.query??'').slice(0,300),selected=query?rank(query,[doc]).slice(0,6):doc.chunks.slice(0,6);
+  const excerpts=selected.map(c=>({text:c.text,page:c.page,sheet:c.sheet??null,source:doc.source,nlp:analyzeText(c.text)}));
+  result={title:doc.title,period:doc.period,source:doc.source,documentId:doc.id,totalChunks:doc.chunks.length,analyzedChunks:excerpts.length,excerpts,limitation:'僅分析以下最多六段，非整份財報；數值只是原文字串，不驗證幣別、期間、合併口徑或公式。掃描件仍需 OCR。'};
+  if(p.semantic===true){if(p.consent!==true)throw new Error('需同意將文件節錄送至財報主理人，可能產生費用');result.semantic=await semanticNLP(excerpts,runAssigned,'financial');}
+ }
  else if(path==='/api/workspace/report'&&req.method==='GET'){const id=url.searchParams.get('id')??'';if(!/^[a-f0-9-]{36}$/.test(id))throw new Error('研究 ID 無效');const job=JSON.parse(await readFile(new URL(`job-${id}.json`,dir),'utf8'));res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename="research-${id}.html"`);res.end(reportHTML(qualityView(job)));return true;}
  else if(path==='/api/workspace/preview'){
   const company=(url.searchParams.get('company')??'').trim();if(company&&!/^\d{4,6}$/.test(company))throw new Error('公司代號需為 4–6 位數字');

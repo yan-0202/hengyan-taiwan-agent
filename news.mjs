@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, rename } from './storage.mjs';
 import { randomUUID } from 'node:crypto';
+import { searchNews, analyzeText, semanticNLP } from './nlp.mjs';
 const dir = new URL('data/news/', import.meta.url);
 const file = name => new URL(name + '.json', dir);
 export const newsLimit = '新聞索引僅提供標題與連結，未讀全文；收錄時間不是發布時間，不能據此證實事件或財務數字。轉載與重複報導不是獨立證據。';
@@ -56,13 +57,23 @@ export async function refreshNews() {
 export function newsEvidence(state) {
   if (state.stale) throw new Error('新聞尚未更新、追蹤清單已變更或快取超過一天；請先更新新聞再研究');
   if (!state.articles.length) throw new Error('本次沒有可用新聞，不代表沒有重大事件');
-  return state.articles.slice(0, 12).map(x => ({ title: x.title, source: x.url, period: x.indexedAt ?? '收錄時間未知；發布時間未知', fetchedAt: state.fetchedAt, type: 'news-headline', stale: false, page: null, text: JSON.stringify({ headline: x.title, publisher: x.publisher, indexedAt: x.indexedAt, publishedAt: null, limitation: newsLimit }) }));
+  return state.articles.slice(0, 12).map(x => ({ title: x.title, source: x.url, period: x.indexedAt ?? '收錄時間未知；發布時間未知', fetchedAt: state.fetchedAt, type: 'news-headline', stale: false, page: null, text: JSON.stringify({ headline: x.title, publisher: x.publisher, indexedAt: x.indexedAt, publishedAt: null, nlp:analyzeText(x.title,state.watchlist), limitation: newsLimit }) }));
 }
 export async function handleNews(req, res, path) {
   if (!path.startsWith('/api/news/')) return false;
   try {
     let result;
     if (path === '/api/news/state' && req.method === 'GET') result = await newsState();
+    else if (['/api/news/search','/api/news/nlp'].includes(path) && req.method === 'POST') {
+      if(!String(req.headers['content-type']).startsWith('application/json'))throw new Error('請使用 JSON');
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>2000)throw new Error('查詢過長');}const p=JSON.parse(raw);
+      const state=await newsState();result=searchNews(state,String(p.query??''));
+      if(path==='/api/news/nlp'){
+        if(state.stale)throw new Error('請先更新新聞，再使用 AI 語意分類');
+        if(p.consent!==true)throw new Error('需同意將最多六則標題送至市場主理人，可能產生費用');
+        result={...result,semantic:await semanticNLP(result.results.slice(0,6).map(x=>({text:x.title,source:x.url})))};
+      }
+    }
     else if (path === '/api/news/watchlist' && req.method === 'POST') {
       if (!String(req.headers['content-type']).startsWith('application/json')) throw new Error('請使用 JSON');
       let raw = ''; for await (const chunk of req) { raw += chunk; if (raw.length > 10000) throw new Error('追蹤清單過大'); }

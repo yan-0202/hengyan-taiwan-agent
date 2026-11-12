@@ -86,6 +86,9 @@ test('雲端：兩帳號的 API、文件、偏好與金鑰隔離；匿名及跨�
     assert.equal((await call('/api/workspace/delete', b, { id: docId })).status, 200);
     assert.equal(JSON.parse((await call('/api/workspace/documents', a)).text).length, 1, 'B 刪除同 ID 不會刪掉 A 文件');
     assert.equal((await call('/api/workspace/report?id='+docId,b)).status,400,'B 無法用 A 的 ID 取得報告');
+    const nlpDoc=await call('/api/workspace/nlp-document',a,{id:docId});assert.equal(nlpDoc.status,200,nlpDoc.text);assert.equal(JSON.parse(nlpDoc.text).excerpts[0].page,1);
+    assert.equal((await call('/api/workspace/nlp-document',b,{id:docId})).status,400,'B 無法以 NLP 端點取得 A 文件');
+    assert.equal((await call('/api/workspace/nlp-document',a,{id:docId,semantic:true})).status,400,'未同意不呼叫付費語意分類');
     assert.equal((await call('/api/research/profile', a, { consent: true, focus: 'A_PRIVATE_FOCUS' })).status, 200);
     assert.equal(JSON.parse((await call('/api/research/state', b)).text).profile, null);
     const saved = await call('/api/ai/connections', a, { provider: 'gemini', name: 'A連線', model: 'test', apiKey: 'test-secret-credential' });
@@ -99,6 +102,10 @@ test('雲端：兩帳號的 API、文件、偏好與金鑰隔離；匿名及跨�
     assert.equal((await call('/api/news/watchlist',a,{watchlist:[{code:'2330',name:'台積電',keyword:'TSMC'}]})).status,200);
     assert.equal(JSON.parse((await call('/api/news/state',b)).text).watchlist.length,0);
     const news=await call('/api/news/refresh',a,{});assert.equal(news.status,200,news.text);assert.equal(JSON.parse(news.text).articles.length,1);
+    const search=await call('/api/news/search',a,{query:'台積電新聞'});assert.equal(search.status,200,search.text);assert.equal(JSON.parse(search.text).results.length,1);assert.ok(!search.text.includes('test-secret-credential'));
+    assert.equal((await call('/api/news/search','',{query:'台積電'})).status,401);
+    assert.equal(JSON.parse((await call('/api/news/search',b,{query:'台積電'})).text).results.length,0);
+    assert.equal((await call('/api/news/nlp',a,{query:'台積電',consent:false})).status,400);
     assert.ok(!news.text.includes('test-secret-credential'));
     assert.equal(JSON.parse((await call('/api/news/state',b)).text).articles.length,0);
     const chart=await call('/api/chart?code=2330',a,{});assert.equal(chart.status,200,chart.text);

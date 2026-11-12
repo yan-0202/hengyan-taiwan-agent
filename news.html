@@ -2,7 +2,7 @@
 <h1>我的新聞追蹤</h1><p>追蹤公司的新聞線索，保留出處，再交給主理人檢視。</p>
 <section><h2>我的股票清單</h2><p>最多 10 檔。GDELT 以英文關鍵字檢索跨語言新聞；公司名稱可能同名，請自行確認相關性。只會傳送你填寫的新聞關鍵字，不會傳送知識庫、研究問題或 AI 金鑰。</p>
 <label for="code">股票代號</label><input id="code" placeholder="2330" inputmode="numeric"><label for="name">公司名稱</label><input id="name" placeholder="台積電"><label for="keyword">英文新聞關鍵字</label><input id="keyword" placeholder="TSMC"><button id="add">加入／更新追蹤</button><div id="watchlist"></div></section>
-<section><h2>重點新聞線索</h2><p>最近三天、最多 50 則，依收錄時間排序；這是檢索結果，未經 AI 評選重要性。標題可點擊開啟原文。沒有搜尋結果不代表沒有新聞。</p><button id="refresh">更新追蹤新聞（不呼叫 AI）</button> <a href="/workspace">交給主理人研究 →</a><p id="status" role="status" aria-live="polite"></p><p id="freshness"></p><p class="notice" id="limitation"></p><div id="articles"></div></section>
+<section><h2>重點新聞線索</h2><p>最近三天、最多 50 則，依收錄時間排序；這是檢索結果，未經 AI 評選重要性。標題可點擊開啟原文。沒有搜尋結果不代表沒有新聞。</p><button id="refresh">更新追蹤新聞（不呼叫 AI）</button> <a href="/workspace">交給主理人研究 →</a><p id="status" role="status" aria-live="polite"></p><p id="freshness"></p><p class="notice" id="limitation"></p><label for="news-query">用一句話查找新聞</label><input id="news-query" placeholder="例如：台積電最近三天的營收新聞"><button id="news-search" class="secondary">免費檢索與 NLP 分類</button> <button id="news-semantic" class="secondary">市場主理人語意分類（最多六則，可能計費）</button><p id="nlp-status" role="status"></p><div id="nlp-plan"></div><div id="nlp-semantic"></div><div id="articles"></div></section>
 <section><h2>追蹤股票走勢與點評</h2><p>上市個股最近兩個曆月的收盤折線；上櫃尚未支援。將滑鼠移到點上或用下方表格核對數值。</p><label for="chart-code">選擇追蹤股票</label><select id="chart-code"></select><button id="chart-load">讀取走勢快照</button> <button id="chart-refresh">下載最新走勢（不呼叫 AI）</button><p id="chart-status" role="status"></p><div id="stock-chart"></div><div id="chart-comment"></div></section>
 <section><h2>追蹤方式</h2><p>目前為手動更新，保存每個帳號自己的清單與新聞快照。免費雲端休眠時不執行背景追蹤，不提供即時新聞警示。團隊研究可勾選加入新聞快照（最多 12 則標題），超過一天或更改追蹤清單後需先更新。</p></section>
 </main><script type="module">
@@ -10,7 +10,7 @@ import { element as el } from '/assets/ui.mjs';
 const $=s=>document.querySelector(s);let state={watchlist:[],articles:[]};
 async function api(path,body){const r=await fetch('/api/news/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(r.status===401){location.assign('/login');throw new Error('請重新登入');}const data=await r.json();if(!r.ok)throw new Error(data.error??'新聞操作失敗');return data;}
 let busy=false;
-async function action(fn){if(busy)return;busy=true;$('#add').disabled=$('#refresh').disabled=true;$('#status').textContent='處理中…';try{state=await fn();render();$('#status').textContent='已載入；請核對新聞與追蹤公司的關聯。';}catch(e){$('#status').textContent=e.message+'；未成功更新，舊快照不代表最新新聞。';}finally{busy=false;$('#add').disabled=$('#refresh').disabled=false;}}
+async function action(fn){if(busy)return;busy=true;$('#add').disabled=$('#refresh').disabled=true;$('#status').textContent='處理中…';try{state=await fn();render();await searchNews(false);$('#status').textContent='已載入；請核對新聞與追蹤公司的關聯。';}catch(e){$('#status').textContent=e.message+'；未成功更新，舊快照不代表最新新聞。';}finally{busy=false;$('#add').disabled=$('#refresh').disabled=false;}}
 function render(){
  const selected=$('#chart-code').value;$('#chart-code').replaceChildren(...state.watchlist.map(x=>{const option=el('option',x.code+' '+x.name);option.value=x.code;return option;}));if(state.watchlist.some(x=>x.code===selected))$('#chart-code').value=selected;
  $('#watchlist').replaceChildren(...state.watchlist.map(x=>{const row=el('p',`${x.code} ${x.name} · ${x.keyword} `);const remove=el('button','移除');remove.className='secondary';remove.onclick=()=>action(()=>api('watchlist',{watchlist:state.watchlist.filter(y=>y.code!==x.code)}));row.append(remove);return row;}));
@@ -20,7 +20,7 @@ function render(){
  if(!state.articles.length)$('#articles').append(el('p','尚無可用新聞；加入追蹤股票後，按「更新追蹤新聞」。'));
 }
 $('#add').onclick=()=>action(()=>{const x={code:$('#code').value.trim(),name:$('#name').value.trim(),keyword:$('#keyword').value.trim()};return api('watchlist',{watchlist:[...state.watchlist.filter(y=>y.code!==x.code),x]});});
-$('#refresh').onclick=()=>action(()=>api('refresh',{}));await action(()=>api('state'));
+$('#refresh').onclick=()=>action(()=>api('refresh',{}));
 async function loadChart(refresh){
  $('#chart-load').disabled=$('#chart-refresh').disabled=true;$('#chart-status').textContent='處理行情中…';$('#stock-chart').replaceChildren();$('#chart-comment').replaceChildren();
  try{const code=$('#chart-code').value;if(!code)throw new Error('請先加入追蹤股票');const r=await fetch('/api/chart?code='+encodeURIComponent(code),refresh?{method:'POST'}:{});const d=await r.json();if(!r.ok)throw new Error(d.error);
@@ -36,4 +36,17 @@ async function loadChart(refresh){
  }catch(e){$('#chart-status').textContent=e.message;}finally{$('#chart-load').disabled=$('#chart-refresh').disabled=false;}
 }
 $('#chart-load').onclick=()=>loadChart(false);$('#chart-refresh').onclick=()=>loadChart(true);$('#chart-code').onchange=()=>{$('#stock-chart').replaceChildren();$('#chart-comment').replaceChildren();$('#chart-status').textContent='已切換股票，請讀取或更新走勢';};
+
+async function searchNews(semantic){
+ $('#news-search').disabled=$('#news-semantic').disabled=true;$('#nlp-status').textContent='正在檢索與分析…';$('#nlp-semantic').replaceChildren();
+ try{const d=await api(semantic?'nlp':'search',{query:$('#news-query').value,consent:semantic});
+ $('#nlp-plan').replaceChildren(el('p',`辨識公司：${d.plan.companies.map(x=>x.name).join('、')||'未指定'} · 主題：${d.plan.topics.join('、')||'未指定'} · 收錄期間：${d.plan.days?d.plan.days+' 天':'未指定'}`),...d.warnings.map(w=>el('small',w+' ')));
+ $('#articles').replaceChildren(...d.results.map(x=>{const item=el('article'),a=el('a',x.title);a.href=x.url;a.target='_blank';a.rel='noopener noreferrer';const h=el('h3');h.append(a);item.append(h,el('p',x.publisher+' · 收錄：'+(x.indexedAt??'未知')+' · 發布時間未知'),el('p','公司：'+(x.nlp.entities.map(e=>e.name).join('、')||'標題未明示追蹤公司')+' · 語氣：'+x.nlp.tone),el('p','事件：'+(x.nlp.topics.map(t=>t.topic).join('、')||'尚未分類')+' · 關鍵詞：'+(x.nlp.keywords.join('、')||'無匹配')),el('small','匹配依據：'+x.reasons.join('；')+'。規則詞典分類，非投資訊號。'));
+ if(x.related.length){const details=el('details');details.append(el('summary',`近似標題 ${x.related.length} 則（不代表已確認為同一事件）`));for(const r of x.related){const link=el('a',r.title+' · '+r.publisher);link.href=r.url;link.target='_blank';link.rel='noopener noreferrer';details.append(link,el('br'));}item.append(details);}return item;}));
+ if(!d.results.length)$('#articles').append(el('p','沒有匹配的已下載標題；請換關鍵字、放寬期間或更新新聞。這不代表全網沒有相關報導。'));
+ if(d.semantic){$('#nlp-semantic').append(el('h3','AI 語意分類（待查核）'),el('p',d.semantic.limitation));for(const x of d.semantic.items){const p=el('p',`${x.id} · ${x.tone} · ${x.topic} · 原文：${x.quote} `),a=el('a','核對來源');a.href=x.source;a.target='_blank';a.rel='noopener noreferrer';p.append(a);$('#nlp-semantic').append(p);}}
+ $('#nlp-status').textContent=`找到 ${d.results.length} 組標題；最多六則可選用 AI 語意分類。`;
+ }catch(e){$('#nlp-status').textContent=e.message;}finally{$('#news-search').disabled=$('#news-semantic').disabled=false;}
+}
+$('#news-search').onclick=()=>searchNews(false);$('#news-semantic').onclick=()=>searchNews(true);$('#news-query').onkeydown=e=>{if(e.key==='Enter')searchNews(false);};await action(()=>api('state'));
 </script></html>
