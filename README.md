@@ -1,6 +1,8 @@
 # 衡研｜台股多主理人研究工作台
 
-需要 Windows、Node.js 24。首次在本目錄執行 npm install，之後雙擊 start.cmd，開啟 http://127.0.0.1:8787 。後端必須持續運作。
+本機個人模式需要 Windows、Node.js 24。首次在本目錄執行 npm install，之後雙擊 start.cmd，開啟 http://127.0.0.1:8787 。後端必須持續運作。
+
+新增多人雲端測試模式：Render Free Node.js ＋ Supabase Auth／私有 Storage。完整部署設定、RLS SQL、環境變數與上線驗收見 [DEPLOYMENT.md](DEPLOYMENT.md)。需要先設定 Supabase 與完成實際雲端驗收，不能只把本機埠映射上網。
 
 ## 介面
 
@@ -40,14 +42,14 @@
 - 尚無圖像／影音分析、Gemini CLI／Antigravity 執行器；API 模式可獨立使用。CLI 的官方 headless 介面需另做權限隔離、登入與驗收。
 - 尚無盤中即時報價、手機推播、回測／實盤交易、自動調倉、信貸核准或認證 KYC／AML。
 - 引用檢查只確認編號，不能證明來源支持主張。模型互評不是正確機率，所有研究需人工核對，不承諾零幻覺。
-- 僅監聽 127.0.0.1:8787，設 Host／Origin 檢查；無多人認證及公開部署完整防護，請勿直接映射上網。
+- 個人模式僅監聽 127.0.0.1:8787。雲端模式改用 0.0.0.0／PORT、HTTPS 公開網址的 Host／Origin 檢查、Supabase 驗證、HttpOnly 登入 Cookie、每帳號的 Storage RLS 及綁定 UID 的 API 金鑰加密。尚需實際兩帳號雲端驗收，非經安全稽核的正式服務。
 - 不可公開 private/ 或 data/。文件節錄會傳往所配置的 AI 服務商。刪除文件不會刪除既有報告證據快照。
 
 ## 驗證
 
 型別：node_modules/.bin/tsc -p tsconfig.json。
 
-核心測試：node --test workspace.test.mjs datahub.test.mjs monitor.test.mjs。
+核心測試：node --test workspace.test.mjs datahub.test.mjs monitor.test.mjs。多人隔離：node --test cloud.test.mjs（模擬 Supabase，不能替代真實 RLS 驗收）。
 AI 協定：node --test ai.test.mjs。文件及匯出：node --test xlsx.test.mjs reports.test.mjs。
 整合：node verify.mjs、node workspace-integration.mjs、node ai-integration.mjs（AI 使用模擬）。
 examples/synthetic-financial.xlsx 是合成測試數據，不是投資依據。

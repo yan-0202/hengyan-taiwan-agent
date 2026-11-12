@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from './storage.mjs';
 import { randomUUID } from 'node:crypto';
 const storage=new URL('data/research/',import.meta.url);
 const profileFile=new URL('profile.json',storage);

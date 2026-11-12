@@ -1,8 +1,9 @@
-import { readFile, writeFile, mkdir, rename, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, readdir } from './storage.mjs';
 import { randomUUID, createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { resolve, sep } from 'node:path';
 import { protect, unprotect } from './secrets.mjs';
+import { cloudMode } from './tenancy.mjs';
 
 const root=new URL('./',import.meta.url);
 const privateDir=process.env.AGENT_CONFIG_DIRECTORY?pathToFileURL(resolve(process.env.AGENT_CONFIG_DIRECTORY)+sep):new URL('private/',root);
@@ -20,7 +21,7 @@ export function validateProviderModel(provider,model){
 }
 let mutation=Promise.resolve();let migration;
 async function readConfig(){try{const v=JSON.parse(await readFile(configFile,'utf8'));return v.format?await unprotect(v):v;}catch(e){if(e.code==='ENOENT')return {connections:[],roles:{}};throw new Error('連線設定檔無法讀取或解密，請使用原 Windows 帳號。');}}
-async function load(){if(!migration)migration=(async()=>{try{const v=JSON.parse(await readFile(configFile,'utf8'));if(!v.format)await save(v);}catch(e){if(e.code!=='ENOENT')throw e;}})().catch(e=>{migration=null;throw e;});await migration;return readConfig();}
+async function load(){if(cloudMode())return readConfig();if(!migration)migration=(async()=>{try{const v=JSON.parse(await readFile(configFile,'utf8'));if(!v.format)await save(v);}catch(e){if(e.code!=='ENOENT')throw e;}})().catch(e=>{migration=null;throw e;});await migration;return readConfig();}
 async function skillBundle(role){
  const entry=await readFile(new URL(`skills/${role}/SKILL.md`,root),'utf8');let text=entry;
  if(role==='financial'){const referenceDir=new URL('skills/financial/references/',root);for(const name of (await readdir(referenceDir)).filter(n=>n.endsWith('.md')).sort())text+=`\n參考文件 ${name}：\n`+await readFile(new URL(name,referenceDir),'utf8');}
@@ -49,12 +50,14 @@ export function validateConnection(input,old){
  if(!name)throw new Error('請填寫連線名稱');validateProviderModel(provider,model);
  let baseUrl=provider==='gemini'?'https://generativelanguage.googleapis.com/v1beta':provider==='anthropic'?'https://api.anthropic.com/v1':String(input.baseUrl??'').replace(/\/+$/,'');
  const u=new URL(baseUrl);if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash)throw new Error('端點必須是無帳密、查詢參數的 HTTPS 網址');
+ validateCloudEndpoint(baseUrl);
  if(/^(localhost|127\.|0\.|10\.|192\.168\.|169\.254\.|\[|172\.(1[6-9]|2\d|3[01])\.)/i.test(u.hostname))throw new Error('不接受本機或私有 IP 端點');
  const apiKey=String(input.apiKey||old?.apiKey||'').trim();if(!apiKey||apiKey.length>4096||!/^[\x21-\x7e]+$/.test(apiKey))throw new Error('API Key 含有中文、空白或非有效憑證字元。請貼上服務商產生的完整 API Key，不要填入連線名稱或說明文字。');
  return {id:old?.id??randomUUID(),name,provider,model,baseUrl,apiKey};
 }
 /** 單次呼叫；不重試以避免不明確的重複計費。測試可注入假的 HTTP transport。 */
 export async function invoke(connection,{system,prompt,model='',maxTokens=512},transport=fetch){
+ validateCloudEndpoint(connection.baseUrl);
  const selected=model||connection.model;validateProviderModel(connection.provider,selected);let endpoint;let headers={'Content-Type':'application/json'};let payload;
  if(connection.provider==='gemini'){
   endpoint=`${connection.baseUrl}/models/${encodeURIComponent(selected)}:generateContent`;
@@ -81,6 +84,11 @@ export async function invoke(connection,{system,prompt,model='',maxTokens=512},t
  if(typeof text!=='string'||!text.trim())throw new Error('AI 未回傳文字；可能受到封鎖或輸出格式不相容');
  const finishReason=connection.provider==='gemini'?data.candidates?.[0]?.finishReason:connection.provider==='anthropic'?data.stop_reason:data.choices?.[0]?.finish_reason;
  return {text:text.slice(0,100000),usage:data.usageMetadata??data.usage??null,model:selected,finishReason:finishReason??null,truncated:['MAX_TOKENS','max_tokens','length'].includes(finishReason)||text.length>100000};
+}
+function validateCloudEndpoint(baseUrl){
+ if(!cloudMode())return;
+ const url=new URL(baseUrl);const hosts=['generativelanguage.googleapis.com','api.openai.com','api.anthropic.com','openrouter.ai','api.deepseek.com'];
+ if(url.protocol!=='https:'||url.port||url.username||url.password||url.search||url.hash||!hosts.includes(url.hostname))throw new Error('公開測試站只開放 Gemini、OpenAI、Anthropic、OpenRouter 與 DeepSeek 官方端點');
 }
 async function readBody(req){let text='';for await(const chunk of req){text+=chunk;if(text.length>20000)throw new Error('請求過大');}return JSON.parse(text||'{}');}
 export async function handleAI(req,res,path){

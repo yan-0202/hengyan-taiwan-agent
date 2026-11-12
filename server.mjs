@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from './storage.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { handleAI } from './ai.mjs';
@@ -7,6 +7,8 @@ import { handleResearch } from './research.mjs';
 import { handleWorkspace } from './workspace.mjs';
 import { handleHub } from './datahub.mjs';
 import { handleMonitor, startMonitoring } from './monitor.mjs';
+import { cloudMode, withIdentity } from './tenancy.mjs';
+import { authenticate, handleAuth, publicOrigin, validateCloudEnvironment } from './auth.mjs';
 
 const root = new URL('./', import.meta.url);
 const dataDir = new URL('data/', root);
@@ -57,15 +59,40 @@ async function runDemo() {
 }
 
 const server = createServer(async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Frame-Options', 'DENY');
+    const url=new URL(req.url??'/','http://localhost');
+    if(url.pathname==='/healthz'&&req.method==='GET'){res.end('ok');return;}
+    if(cloudMode()){
+      if(req.headers.host!==new URL(publicOrigin()).host){res.writeHead(403);res.end('不接受的 Host');return;}
+      if(!['GET','HEAD'].includes(req.method??'GET')&&req.headers.origin!==publicOrigin()){res.writeHead(403);res.end('拒絕跨站請求');return;}
+    }
+    if(await handleAuth(req,res,url.pathname))return;
+    if(req.method==='GET'&&['/login','/assets/auth.mjs'].includes(url.pathname)){
+      res.setHeader('Content-Type',url.pathname==='/login'?'text/html; charset=utf-8':'application/javascript; charset=utf-8');
+      res.end(await readFile(new URL(url.pathname==='/login'?'login.html':'auth-ui.mjs',root),'utf8'));return;
+    }
+    const user=await authenticate(req);
+    if(cloudMode()&&!user&&url.pathname!=='/assets/ui.css'){
+      if(url.pathname.startsWith('/api/')){res.writeHead(401,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'登入已逾時，請重新登入'}));}
+      else{res.writeHead(303,{Location:'/login'});res.end();}return;
+    }
+    await withIdentity(user,()=>serve(req,res));
+  }catch{res.writeHead(503);res.end('服務暫時無法連線，請稍後重試');}
+});
+async function serve(req,res){
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   try {
-    await mkdir(dataDir,{recursive:true});
     const url=new URL(req.url??'/','http://localhost');
-    if(!['127.0.0.1:8787','localhost:8787'].includes(req.headers.host??'') && !process.env.AGENT_TEST){res.writeHead(403);res.end('不接受的 Host');return;}
-    if(req.method==='POST' && req.headers.origin && req.headers.origin!==`http://${req.headers.host}`){res.writeHead(403);res.end('拒絕跨站請求');return;}
+    if(!cloudMode()&&!['127.0.0.1:8787','localhost:8787'].includes(req.headers.host??'') && !process.env.AGENT_TEST){res.writeHead(403);res.end('不接受的 Host');return;}
+    if(!cloudMode()&&req.method==='POST' && req.headers.origin && req.headers.origin!==`http://${req.headers.host}`){res.writeHead(403);res.end('拒絕跨站請求');return;}
     const assets = {'/assets/ui.css':['theme.css','text/css'], '/assets/ui.mjs':['ui.mjs','application/javascript'], '/assets/home.mjs':['home.mjs','application/javascript']};
     if(req.method==='GET' && Object.hasOwn(assets,url.pathname)){const [file,type]=assets[url.pathname];res.setHeader('Content-Type',`${type}; charset=utf-8`);res.end(await readFile(new URL(file,root)));return;}
+    await mkdir(dataDir,{recursive:true});
     if(url.pathname.startsWith('/api/'))res.setHeader('Content-Type','application/json; charset=utf-8');
     if(await handleAI(req,res,url.pathname))return;
     if(await handleResearch(req,res,url.pathname))return;
@@ -90,17 +117,19 @@ const server = createServer(async (req, res) => {
       await writeFile(new URL(`run-${report.id}.json`,dataDir),JSON.stringify(report));res.end(JSON.stringify(report));return;
     }
     if(url.pathname==='/api/runs'){const files=(await readdir(dataDir)).filter(x=>/^run-\d+\.json$/.test(x)).sort().reverse().slice(0,20);res.end(JSON.stringify(await Promise.all(files.map(async f=>JSON.parse(await readFile(new URL(f,dataDir),'utf8'))))));return;}
-    if (req.url === '/api/demo' && req.method === 'GET') {
+    if (url.pathname === '/api/demo' && req.method === 'GET') {
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify(await runDemo()));
-    } else if (req.url === '/' && req.method === 'GET') {
+    } else if (url.pathname === '/' && req.method === 'GET') {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.end(await readFile(new URL('index.html', root)));
     } else { res.writeHead(404); res.end('Not found'); }
   } catch { res.writeHead(500); res.end('無法讀取原型檔案'); }
-});
+}
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  validateCloudEnvironment();
   await startMonitoring();
-  server.listen(8787, '127.0.0.1', () => console.log('請開啟 http://127.0.0.1:8787'));
+  const port=cloudMode()?Number(process.env.PORT??10000):8787;
+  server.listen(port, cloudMode()?'0.0.0.0':'127.0.0.1', () => console.log(cloudMode()?'雲端服務已啟動':'請開啟 http://127.0.0.1:8787'));
 }
 export { server };

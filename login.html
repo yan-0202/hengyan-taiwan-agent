@@ -1,0 +1,6 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>登入｜衡研 HENGYAN</title><link rel="stylesheet" href="/assets/ui.css"><script type="module" src="/assets/auth.mjs"></script></head>
+<body class="auth-page"><main class="auth-card"><a class="auth-brand" href="/">衡研 <small>HENGYAN RESEARCH</small></a><div class="eyebrow">YOUR PRIVATE RESEARCH SPACE</div><h1>讓研究，從你的觀點開始。</h1><p>建立帳號，配置自己的 AI 團隊與知識庫。</p>
+<div class="auth-tabs" role="group" aria-label="帳號操作"><button id="login-tab" type="button" aria-pressed="true">登入</button><button id="signup-tab" type="button" class="secondary" aria-pressed="false">建立帳號</button></div>
+<form id="auth-form"><label for="email">電子郵件</label><input id="email" name="email" type="email" autocomplete="username" maxlength="254" required><label for="password">密碼</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required><small>請使用至少 12 個字元的密碼。新帳號需先驗證電子郵件。</small><button id="submit" type="submit">登入研究空間 →</button></form><p id="auth-status" role="status" aria-live="polite"></p>
+<div class="auth-note">每個帳號使用自己的 AI API 金鑰；AI 服務商可能依你的用量收費。知識庫節錄只在你執行分析時傳送給所配置的 AI。本站為免費測試服務，會有休眠與容量限制；請自行保留原始文件。</div></main></body></html>

@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, readdir, unlink, rename } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, unlink, rename } from './storage.mjs';
 import { randomUUID, createHash } from 'node:crypto';
 import { PDFParse } from 'pdf-parse';
 import { Worker } from 'node:worker_threads';
@@ -6,7 +6,14 @@ import { runAssigned, teamReadiness } from './ai.mjs';
 import { cachedSnapshot } from './evidence.mjs';
 import { reportHTML } from './reports.mjs';
 import { qualityVersion, inventory, sourceChecks, prerequisites, decisionSchema, validateDecision, qualityView } from './quality.mjs';
-const dir=new URL('data/workspace/',import.meta.url);const jobs=new Map();
+import { cloudMode, tenantId } from './tenancy.mjs';
+const dir=new URL('data/workspace/',import.meta.url);const runningJobs=new Map();
+const jobs={
+ get size(){return [...runningJobs.keys()].filter(key=>key.startsWith(tenantId()+':')).length;},
+ set(id,job){if(cloudMode()&&runningJobs.size>=2)throw new Error('免費測試站目前忙碌，請稍後再試');runningJobs.set(tenantId()+':'+id,job);},
+ has(id){return runningJobs.has(tenantId()+':'+id);},
+ delete(id){return runningJobs.delete(tenantId()+':'+id);}
+};
 export async function parseSpreadsheet(data){return new Promise((resolve,reject)=>{const worker=new Worker(new URL('xlsx-worker.mjs',import.meta.url),{workerData:new Uint8Array(data),resourceLimits:{maxOldGenerationSizeMb:128},execArgv:[]});let settled=false;const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);worker.terminate();if(error)reject(new Error(error));else resolve(value);};const timer=setTimeout(()=>finish('Excel 解析逾時，請縮小檔案',null),30000);worker.on('message',x=>finish(x.error,x));worker.on('error',()=>finish('Excel 解析失敗或超過記憶體限制',null));worker.on('exit',code=>{if(!settled)finish('Excel 解析程序未完成，代碼 '+code,null);});});}
 export function checkCitations(text,evidence){
  const references=[];const malformed=[];
@@ -71,11 +78,12 @@ export async function handleWorkspace(req,res,path,url){
  }
  else if(path==='/api/workspace/documents'){
   if(req.method==='POST'){
-   const p=await body(req);if(!p.title||!p.period)throw new Error('請填文件名稱與期間');let pages;let sheetNames=[];
+   const p=await body(req);if(!p.title||!p.period)throw new Error('請填文件名稱與期間');if(cloudMode()&&(await documents()).length>=25)throw new Error('免費測試站每個帳號最多 25 份文件，請先刪除不需要的文件');let pages;let sheetNames=[];
    if(p.pdf){const data=Buffer.from(p.pdf,'base64');if(data.length>10000000||data.subarray(0,5).toString()!=='%PDF-')throw new Error('PDF 格式或大小不符');const parser=new PDFParse({data:new Uint8Array(data)});try{const r=await parser.getText();pages=r.pages.map(x=>x.text);}finally{await parser.destroy();}}
    else if(p.xlsx){const data=Buffer.from(p.xlsx,'base64');if(data.length>10000000||data.subarray(0,2).toString()!=='PK')throw new Error('XLSX 格式或大小不符');const parsed=await parseSpreadsheet(data);pages=parsed.pages;sheetNames=parsed.sheetNames;}
    else pages=String(p.text??'').split('\f');
    if(!pages.join('').trim())throw new Error('沒有可擷取文字；掃描 PDF 需要 OCR，目前不支援');
+   if(cloudMode()&&Buffer.byteLength(pages.join(''))>1_000_000)throw new Error('免費測試站每份文件擷取文字限 1 MB，請分段整理');
    const hash=createHash('sha256').update(pages.join('\f')).digest('hex');const existing=(await documents()).find(d=>d.hash===hash&&d.period===String(p.period).slice(0,100));if(existing){result={id:existing.id,chunks:existing.chunks.length,duplicate:true};}else{const d={id:randomUUID(),title:String(p.title).slice(0,200),period:String(p.period).slice(0,100),source:String(p.source??'使用者提供文件').slice(0,1000),createdAt:new Date().toISOString(),hash,chunks:chunks(pages).map(c=>({...c,...(sheetNames[c.page-1]?{sheet:sheetNames[c.page-1]}:{})}))};await writeFile(new URL(`doc-${d.id}.json`,dir),JSON.stringify(d));result={id:d.id,chunks:d.chunks.length};}
   }else result=(await documents()).map(({chunks,...d})=>({...d,chunks:chunks.length}));
  }else if(path==='/api/workspace/delete'&&req.method==='POST'){const p=await body(req);if(!/^[a-f0-9-]{36}$/.test(p.id))throw new Error('文件 ID 無效');await unlink(new URL(`doc-${p.id}.json`,dir));result={deleted:true};}

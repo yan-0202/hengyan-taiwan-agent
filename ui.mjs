@@ -26,3 +26,18 @@ const note=element('div',undefined,'sidebar-note');const label=element('span','�
 const topbar=element('header',undefined,'app-topbar');const crumbs=element('div',undefined,'breadcrumbs');const menu=element('button',undefined,'menu-button');menu.type='button';menu.setAttribute('aria-label','開啟導覽選單');menu.setAttribute('aria-controls','app-navigation');menu.setAttribute('aria-expanded','false');menu.append(icon('menu'));crumbs.append(menu,element('span','工作空間'),element('span','/'),element('strong',active[1]));const tools=element('div',undefined,'topbar-tools');tools.append(element('span',new Intl.DateTimeFormat('zh-TW',{timeZone:'Asia/Taipei',year:'numeric',month:'long',day:'numeric'}).format(new Date()),'date'));const badge=element('span','本機測試版','badge');const settings=element('a',undefined,'topbar-link');settings.href='/ai';settings.setAttribute('aria-label','AI 團隊設定');settings.append(icon('settings'));tools.append(badge,settings);topbar.append(crumbs,tools);
 const scrim=element('button',undefined,'nav-scrim');scrim.type='button';scrim.setAttribute('aria-label','關閉導覽選單');scrim.tabIndex=-1;function close(){document.body.classList.remove('nav-open');menu.setAttribute('aria-expanded','false');}menu.onclick=()=>{const open=document.body.classList.toggle('nav-open');menu.setAttribute('aria-expanded',String(open));if(open)nav.querySelector('a.active')?.focus();};scrim.onclick=close;document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('nav-open')){close();menu.focus();}});document.body.prepend(sidebar,topbar,scrim);
 if(location.pathname!=='/'){const main=document.querySelector('main');const h1=main.querySelector('h1');if(h1){const intro=h1.nextElementSibling;const heading=element('div',undefined,'page-heading');const text=element('div');text.append(element('div','RESEARCH WORKSPACE','eyebrow'),h1);if(intro?.tagName==='P')text.append(intro);heading.append(text);main.prepend(heading);}const footer=element('footer','衡研 HENGYAN · 個人金融研究工作台','app-footer');main.append(footer);}
+try{
+ const response=await fetch('/api/auth/me');const account=await response.json();
+ if(!account.local){
+  if(!account.user){location.assign('/login');}
+  else{
+   badge.textContent='雲端測試版';label.lastChild.textContent='私人研究空間';
+   profileInfo.replaceChildren(element('strong',account.user.email),element('small','PRIVATE WORKSPACE'));
+   profileInfo.style.overflowWrap='anywhere';
+   const logout=element('button','登出','secondary');logout.type='button';
+   logout.onclick=async()=>{logout.disabled=true;try{const r=await fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(!r.ok)throw new Error('登出失敗，請稍後重試');location.assign('/login');}catch(e){logout.textContent=e.message;logout.disabled=false;}};
+   note.append(element('p','私人文件與 AI 設定保存在你的雲端空間。免費服務會休眠，請保留原始文件。'),logout);
+   const footer=document.querySelector('.dashboard-footer');if(footer)footer.lastElementChild.textContent='私人資料依帳號保存；分析時文件節錄會傳送給你配置的 AI。';
+  }
+ }
+}catch{/* 登入狀態服務暫時不可用時，不改寫既有研究內容。 */}
