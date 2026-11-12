@@ -18,7 +18,7 @@ const paths={
 export function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('icon');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]??paths.grid);svg.append(path);return svg;}
 /** @returns {any} */
 export function element(tag,text,className=''){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;}
-const navigation=[['/','市場總覽','grid'],['/workspace','團隊研究','team'],['/data','官方資料中心','chart'],['/ai','AI 團隊配置','layers'],['/research','研究工具','settings']];
+const navigation=[['/','市場總覽','grid'],['/workspace','團隊研究','team'],['/data','官方資料中心','chart'],['/news','我的新聞追蹤','book'],['/ai','AI 團隊配置','layers'],['/research','研究工具','settings']];
 const active=navigation.find(n=>n[0]===location.pathname)??navigation[0];document.body.classList.add('page-'+(location.pathname.slice(1)||'home'));
 const sidebar=element('aside',undefined,'app-sidebar');sidebar.id='app-navigation';const brand=element('a',undefined,'app-brand');brand.href='/';const mark=element('span',undefined,'brand-mark');mark.append(icon('chart'));const name=element('div');name.append(element('strong','衡研'),element('small','HENGYAN RESEARCH'));brand.append(mark,name);
 const nav=element('nav',undefined,'app-nav');nav.setAttribute('aria-label','主要導覽');for(const [href,label,glyph] of navigation){const a=element('a',undefined,href===active[0]?'active':'');a.href=href;if(href===active[0])a.setAttribute('aria-current','page');a.append(icon(glyph),element('span',label));nav.append(a);}

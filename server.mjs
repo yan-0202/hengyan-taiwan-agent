@@ -3,6 +3,8 @@ import { readFile, writeFile, mkdir, readdir } from './storage.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { handleAI } from './ai.mjs';
+import { handleNews } from './news.mjs';
+import { handleChart } from './chart.mjs';
 import { handleResearch } from './research.mjs';
 import { handleWorkspace } from './workspace.mjs';
 import { handleHub } from './datahub.mjs';
@@ -95,6 +97,9 @@ async function serve(req,res){
     await mkdir(dataDir,{recursive:true});
     if(url.pathname.startsWith('/api/'))res.setHeader('Content-Type','application/json; charset=utf-8');
     if(await handleAI(req,res,url.pathname))return;
+    if(await handleNews(req,res,url.pathname))return;
+    if(await handleChart(req,res,url.pathname,url))return;
+    if(url.pathname==='/news'&&req.method==='GET'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(await readFile(new URL('news.html',root)));return;}
     if(await handleResearch(req,res,url.pathname))return;
     if(await handleWorkspace(req,res,url.pathname,url))return;
     if(await handleHub(req,res,url.pathname))return;

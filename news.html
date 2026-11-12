@@ -1,0 +1,39 @@
+<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>我的新聞追蹤｜衡研</title><link rel="stylesheet" href="/assets/ui.css"><script type="module" src="/assets/ui.mjs"></script><main>
+<h1>我的新聞追蹤</h1><p>追蹤公司的新聞線索，保留出處，再交給主理人檢視。</p>
+<section><h2>我的股票清單</h2><p>最多 10 檔。GDELT 以英文關鍵字檢索跨語言新聞；公司名稱可能同名，請自行確認相關性。只會傳送你填寫的新聞關鍵字，不會傳送知識庫、研究問題或 AI 金鑰。</p>
+<label for="code">股票代號</label><input id="code" placeholder="2330" inputmode="numeric"><label for="name">公司名稱</label><input id="name" placeholder="台積電"><label for="keyword">英文新聞關鍵字</label><input id="keyword" placeholder="TSMC"><button id="add">加入／更新追蹤</button><div id="watchlist"></div></section>
+<section><h2>重點新聞線索</h2><p>最近三天、最多 50 則，依收錄時間排序；這是檢索結果，未經 AI 評選重要性。標題可點擊開啟原文。沒有搜尋結果不代表沒有新聞。</p><button id="refresh">更新追蹤新聞（不呼叫 AI）</button> <a href="/workspace">交給主理人研究 →</a><p id="status" role="status" aria-live="polite"></p><p id="freshness"></p><p class="notice" id="limitation"></p><div id="articles"></div></section>
+<section><h2>追蹤股票走勢與點評</h2><p>上市個股最近兩個曆月的收盤折線；上櫃尚未支援。將滑鼠移到點上或用下方表格核對數值。</p><label for="chart-code">選擇追蹤股票</label><select id="chart-code"></select><button id="chart-load">讀取走勢快照</button> <button id="chart-refresh">下載最新走勢（不呼叫 AI）</button><p id="chart-status" role="status"></p><div id="stock-chart"></div><div id="chart-comment"></div></section>
+<section><h2>追蹤方式</h2><p>目前為手動更新，保存每個帳號自己的清單與新聞快照。免費雲端休眠時不執行背景追蹤，不提供即時新聞警示。團隊研究可勾選加入新聞快照（最多 12 則標題），超過一天或更改追蹤清單後需先更新。</p></section>
+</main><script type="module">
+import { element as el } from '/assets/ui.mjs';
+const $=s=>document.querySelector(s);let state={watchlist:[],articles:[]};
+async function api(path,body){const r=await fetch('/api/news/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(r.status===401){location.assign('/login');throw new Error('請重新登入');}const data=await r.json();if(!r.ok)throw new Error(data.error??'新聞操作失敗');return data;}
+let busy=false;
+async function action(fn){if(busy)return;busy=true;$('#add').disabled=$('#refresh').disabled=true;$('#status').textContent='處理中…';try{state=await fn();render();$('#status').textContent='已載入；請核對新聞與追蹤公司的關聯。';}catch(e){$('#status').textContent=e.message+'；未成功更新，舊快照不代表最新新聞。';}finally{busy=false;$('#add').disabled=$('#refresh').disabled=false;}}
+function render(){
+ const selected=$('#chart-code').value;$('#chart-code').replaceChildren(...state.watchlist.map(x=>{const option=el('option',x.code+' '+x.name);option.value=x.code;return option;}));if(state.watchlist.some(x=>x.code===selected))$('#chart-code').value=selected;
+ $('#watchlist').replaceChildren(...state.watchlist.map(x=>{const row=el('p',`${x.code} ${x.name} · ${x.keyword} `);const remove=el('button','移除');remove.className='secondary';remove.onclick=()=>action(()=>api('watchlist',{watchlist:state.watchlist.filter(y=>y.code!==x.code)}));row.append(remove);return row;}));
+ $('#limitation').textContent=state.limitation;
+ $('#freshness').textContent=(state.stale?'尚未更新／快照過期':'快照已載入')+' · 最近成功下載：'+(state.fetchedAt?new Date(state.fetchedAt).toLocaleString('zh-TW'):'尚未下載');
+ $('#articles').replaceChildren(...state.articles.map(x=>{const item=el('article'),link=el('a',x.title);link.href=x.url;link.target='_blank';link.rel='noopener noreferrer';link.referrerPolicy='no-referrer';const title=el('h3');title.append(link);item.append(title,el('p',`${x.publisher} · ${x.language} · 收錄：${x.indexedAt?new Date(x.indexedAt).toLocaleString('zh-TW'):'未知'} · 發布時間未確認`),el('small','標題索引，尚未閱讀全文；可能是同事件轉載。'));return item;}));
+ if(!state.articles.length)$('#articles').append(el('p','尚無可用新聞；加入追蹤股票後，按「更新追蹤新聞」。'));
+}
+$('#add').onclick=()=>action(()=>{const x={code:$('#code').value.trim(),name:$('#name').value.trim(),keyword:$('#keyword').value.trim()};return api('watchlist',{watchlist:[...state.watchlist.filter(y=>y.code!==x.code),x]});});
+$('#refresh').onclick=()=>action(()=>api('refresh',{}));await action(()=>api('state'));
+async function loadChart(refresh){
+ $('#chart-load').disabled=$('#chart-refresh').disabled=true;$('#chart-status').textContent='處理行情中…';$('#stock-chart').replaceChildren();$('#chart-comment').replaceChildren();
+ try{const code=$('#chart-code').value;if(!code)throw new Error('請先加入追蹤股票');const r=await fetch('/api/chart?code='+encodeURIComponent(code),refresh?{method:'POST'}:{});const d=await r.json();if(!r.ok)throw new Error(d.error);
+ const a=d.analysis;$('#chart-status').textContent=`${code} · ${a.firstDate} 至 ${a.lastDate} · ${d.points.length} 筆收盤 · ${d.stale?'快照過期，請更新':'下載：'+new Date(d.fetchedAt).toLocaleString('zh-TW')}`;
+ const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox','0 0 700 260');svg.style.width='100%';svg.setAttribute('role','img');svg.setAttribute('aria-label',code+' 收盤走勢，詳細數值見下方表格');
+ const min=a.minimum,max=a.maximum,pad=Math.max((max-min)*.1,1),xy=d.points.map((p,i)=>[45+i/(d.points.length-1)*620,220-(p.close-min+pad)/(max-min+2*pad)*180]);
+ const path=document.createElementNS(ns,'path');path.setAttribute('d',xy.map(([x,y],i)=>(i?'L':'M')+x+','+y).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke','#7361d9');path.setAttribute('stroke-width','3');svg.append(path);
+ d.points.forEach((p,i)=>{const dot=document.createElementNS(ns,'circle');dot.setAttribute('cx',xy[i][0]);dot.setAttribute('cy',xy[i][1]);dot.setAttribute('r','4');dot.setAttribute('fill','#7361d9');const title=document.createElementNS(ns,'title');title.textContent=p.date+'：'+p.close+' 元';dot.append(title);svg.append(dot);});
+ for(const [x,y,label] of [[5,35,max.toFixed(2)],[5,225,min.toFixed(2)],[45,250,a.firstDate],[555,250,a.lastDate]]){const t=document.createElementNS(ns,'text');t.setAttribute('x',x);t.setAttribute('y',y);t.setAttribute('font-size','12');t.setAttribute('fill','#5c526d');t.textContent=label;svg.append(t);}$('#stock-chart').append(svg);
+ $('#chart-comment').append(el('h3','程式點評（描述統計，非 AI 預測）'),el('p',a.commentary),el('p',`區間收盤最低 ${a.minimum} 元、最高 ${a.maximum} 元；五日均價 ${a.ma5?.toFixed(2)??'不足資料'}、二十日均價 ${a.ma20?.toFixed(2)??'不足資料'}。`),el('p',a.limitation));
+ for(const source of d.sources){const link=el('a','交易所原始資料 ↗');link.href=source;link.target='_blank';link.rel='noopener noreferrer';$('#chart-comment').append(link,el('br'));}
+ const detail=el('details'),summary=el('summary','查看逐日收盤數值');detail.append(summary);for(const p of d.points)detail.append(el('p',p.date+' · '+p.close+' 元'));$('#chart-comment').append(detail);
+ }catch(e){$('#chart-status').textContent=e.message;}finally{$('#chart-load').disabled=$('#chart-refresh').disabled=false;}
+}
+$('#chart-load').onclick=()=>loadChart(false);$('#chart-refresh').onclick=()=>loadChart(true);$('#chart-code').onchange=()=>{$('#stock-chart').replaceChildren();$('#chart-comment').replaceChildren();$('#chart-status').textContent='已切換股票，請讀取或更新走勢';};
+</script></html>

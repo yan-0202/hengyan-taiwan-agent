@@ -21,7 +21,13 @@ test('雲端：兩帳號的 API、文件、偏好與金鑰隔離；匿名及跨�
   process.env.SUPABASE_URL = 'https://testproject.supabase.co'; process.env.SUPABASE_PUBLISHABLE_KEY = 'test-publishable-key';
   process.env.AGENT_MASTER_KEY = randomBytes(32).toString('hex');
   globalThis.fetch = async (input, options = {}) => {
-    const url = new URL(String(input)); if (url.hostname !== 'testproject.supabase.co') return originalFetch(input, options);
+    const url = new URL(String(input));
+    if(['api.gdeltproject.org','www.twse.com.tw'].includes(url.hostname)){
+      const headers=new Headers(options.headers);assert.equal(headers.get('Authorization'),null);assert.equal(headers.get('x-goog-api-key'),null);
+      if(url.hostname==='api.gdeltproject.org')return json({articles:[{title:'TEST ONLY TSMC headline',url:'https://news.example/test',seendate:'20261112T020000Z'}]});
+      return json({stat:'OK',fields:['日期','收盤價'],data:[['115/11/10','100'],['115/11/11','101']]});
+    }
+    if (url.hostname !== 'testproject.supabase.co') return originalFetch(input, options);
     const headers = new Headers(options.headers); const id = headers.get('Authorization')?.replace(/^Bearer /, '');
     if (url.pathname === '/auth/v1/user') return [a, b].includes(id) ? json({ id, email: id + '@test.example', email_confirmed_at: '2026-01-01T00:00:00Z' }) : json({ message: 'Invalid token' }, 401);
     if(url.pathname==='/auth/v1/token')return json({access_token:a,refresh_token:'never-persist-this-refresh-token',token_type:'bearer',expires_in:3600,user:{id:a,email:'test@example.com',email_confirmed_at:'2026-01-01T00:00:00Z'}});
@@ -87,6 +93,18 @@ test('雲端：兩帳號的 API、文件、偏好與金鑰隔離；匿名及跨�
     assert.equal(JSON.parse((await call('/api/ai/config', b)).text).connections.length, 0);
     assert.equal(JSON.parse((await call('/api/ai/config', a)).text).connections.length, 1);
     assert.ok(!objects.get(a + '/private/connections.json').includes('test-secret-credential'));
+    assert.equal((await call('/api/news/state')).status,401);
+    assert.equal((await call('/api/chart?code=2330')).status,401);
+    assert.equal((await call('/news',a)).status,200);
+    assert.equal((await call('/api/news/watchlist',a,{watchlist:[{code:'2330',name:'台積電',keyword:'TSMC'}]})).status,200);
+    assert.equal(JSON.parse((await call('/api/news/state',b)).text).watchlist.length,0);
+    const news=await call('/api/news/refresh',a,{});assert.equal(news.status,200,news.text);assert.equal(JSON.parse(news.text).articles.length,1);
+    assert.ok(!news.text.includes('test-secret-credential'));
+    assert.equal(JSON.parse((await call('/api/news/state',b)).text).articles.length,0);
+    const chart=await call('/api/chart?code=2330',a,{});assert.equal(chart.status,200,chart.text);
+    assert.equal((await call('/api/chart?code=2330',b)).status,400);
+    assert.equal((await call('/api/news/watchlist',a,{watchlist:[]})).status,200);
+    assert.equal(JSON.parse((await call('/api/news/state',a)).text).articles.length,0,'修改追蹤清單後不混入舊結果');
     const logout = await call('/api/auth/logout', a, {}); assert.equal(logout.status, 200);
     for (const flag of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Max-Age=0']) assert.ok(logout.headers.get('set-cookie').includes(flag));
     assert.ok(trace.some(x => x.id === b && x.key.startsWith(b + '/')));

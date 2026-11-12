@@ -4,6 +4,8 @@ import { PDFParse } from 'pdf-parse';
 import { Worker } from 'node:worker_threads';
 import { runAssigned, teamReadiness } from './ai.mjs';
 import { cachedSnapshot } from './evidence.mjs';
+import { newsState, newsEvidence, newsLimit } from './news.mjs';
+import { chartSnapshot } from './chart.mjs';
 import { reportHTML } from './reports.mjs';
 import { qualityVersion, inventory, sourceChecks, prerequisites, decisionSchema, validateDecision, qualityView } from './quality.mjs';
 import { cloudMode, tenantId } from './tenancy.mjs';
@@ -98,6 +100,8 @@ export async function handleWorkspace(req,res,path,url){
   const readiness=await teamReadiness();if(!readiness.ready)throw new Error('請先完成五位主理人設定：'+readiness.issues.join('；'));
   const company=String(p.company??'').trim();if(company&&!/^\d{4,6}$/.test(company))throw new Error('公司代號需為 4–6 位數字');
   const snapshot=p.includeOfficial===true?await cachedSnapshot(company):{evidence:[],calculations:[],warnings:[]};
+  if(p.includeNews===true){snapshot.evidence.push(...newsEvidence(await newsState()));snapshot.warnings.push(newsLimit);}
+  if(p.includeChart===true){const chart=await chartSnapshot(company);if(chart.stale)throw new Error('走勢快照超過一天，請先更新');snapshot.evidence.push({title:company+' 收盤走勢與描述統計',source:chart.sources[0],period:chart.analysis.firstDate+' 至 '+chart.analysis.lastDate,type:'price-history',fetchedAt:chart.fetchedAt,stale:false,text:JSON.stringify(chart),page:null});snapshot.warnings.push(chart.analysis.limitation);}
   let profile=null;if(p.includeProfile===true){try{const saved=JSON.parse(await readFile(new URL('data/research/profile.json',import.meta.url),'utf8'));if(saved?.consent===true)profile={market:saved.market,horizon:saved.horizon,focus:saved.focus};}catch{}}
   const evidence=[...rank(question,await documents()),...snapshot.evidence].map((e,i)=>({...e,citation:`E${i+1}`}));
   const scoringMode=p.scoringMode==='team'?'team':'basic';const estimatedCalls=scoringMode==='team'?9:6;
